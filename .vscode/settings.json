@@ -1,0 +1,92 @@
+{
+  // Python Environment
+  "python.defaultInterpreterPath": "${env:CONDA_PREFIX}\\python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.condaPath": "conda",
+  
+  // Testing
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": [
+    "tests",
+    "-v",
+    "--maxfail=1",
+    "--disable-warnings"
+  ],
+  
+  // Linting & Formatting
+  "python.linting.enabled": true,
+  "python.linting.flake8Enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.flake8Args": [
+    "--max-line-length=120",
+    "--ignore=E203,W503,E501"
+  ],
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.python",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "black-formatter.args": [
+    "--line-length=120"
+  ],
+  "isort.args": [
+    "--profile=black"
+  ],
+  
+  // Editor Settings
+  "editor.rulers": [120],
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": false,
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  
+  // File Exclusions
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ipynb_checkpoints": true,
+    "**/.venv": true,
+    "**/.eggs": true,
+    "**/*.egg-info": true
+  },
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/**": true,
+    "**/.pytest_cache/**": true,
+    "**/__pycache__/**": true,
+    "**/data/raw/**": true,
+    "**/data/processed/**": true
+  },
+  
+  // Jupyter Notebooks
+  "jupyter.jupyterServerType": "local",
+  "notebook.cellToolbarLocation": {
+    "default": "right",
+    "jupyter-notebook": "left"
+  },
+  
+  // Terminal
+  "terminal.integrated.env.windows": {
+    "PYTHONPATH": "${workspaceFolder}"
+  },
+  
+  // IntelliSense
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.completeFunctionParens": true,
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}"
+  ],
+  
+  // Git
+  "git.ignoreLimitWarning": true,
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda",
+  "python-envs.pythonProjects": []
+}

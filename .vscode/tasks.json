@@ -1,0 +1,256 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Test: Run All Tests",
+      "type": "shell",
+      "command": "pytest",
+      "args": [
+        "tests/",
+        "-v",
+        "--maxfail=1",
+        "--disable-warnings",
+        "--tb=short"
+      ],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Test: Run with Coverage",
+      "type": "shell",
+      "command": "pytest",
+      "args": [
+        "tests/",
+        "--cov=agents",
+        "--cov=envs",
+        "--cov=backtests",
+        "--cov-report=html",
+        "--cov-report=term"
+      ],
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint: Flake8 All",
+      "type": "shell",
+      "command": "flake8",
+      "args": [
+        "agents",
+        "envs",
+        "backtests",
+        "dashboards",
+        "utils",
+        "--max-line-length=120",
+        "--statistics"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Format: Black All Files",
+      "type": "shell",
+      "command": "black",
+      "args": [
+        "agents",
+        "envs",
+        "backtests",
+        "dashboards",
+        "utils",
+        "tests",
+        "--line-length=120"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Format: Sort Imports (isort)",
+      "type": "shell",
+      "command": "isort",
+      "args": [
+        "agents",
+        "envs",
+        "backtests",
+        "dashboards",
+        "utils",
+        "tests",
+        "--profile=black"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Type Check: MyPy",
+      "type": "shell",
+      "command": "mypy",
+      "args": [
+        "agents",
+        "envs",
+        "backtests",
+        "--ignore-missing-imports",
+        "--show-error-codes"
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Train: PPO Agent",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "agents/ppo_agent.py",
+        "--config",
+        "configs/ppo_credits.yaml"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Train: DQN Agent",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "agents/dqn_agent.py",
+        "--config",
+        "configs/dqn_crossasset.yaml"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Backtest: Run Analysis",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "backtests/backtest_runner.py",
+        "--agent",
+        "ppo",
+        "--env",
+        "cross_asset",
+        "--costs",
+        "realistic"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Dashboard: Launch Streamlit",
+      "type": "shell",
+      "command": "streamlit",
+      "args": [
+        "run",
+        "dashboards/streamlit_app.py"
+      ],
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Dashboard: Launch Dash",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "dashboards/dash_app.py"
+      ],
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Build Image",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "build",
+        "-t",
+        "credit-alpha-rl",
+        "."
+      ],
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Docker: Run Container",
+      "type": "shell",
+      "command": "docker",
+      "args": [
+        "run",
+        "-p",
+        "8501:8501",
+        "credit-alpha-rl"
+      ],
+      "group": "none",
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Clean: Remove Cache Files",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "Get-ChildItem -Recurse -Include __pycache__,*.pyc,.pytest_cache,.mypy_cache | Remove-Item -Recurse -Force"
+      ],
+      "group": "none",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+  ]
+}
