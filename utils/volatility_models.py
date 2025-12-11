@@ -6,7 +6,7 @@ and credit-specific volatility estimators for risk management and trading.
 """
 
 import warnings
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -118,10 +118,10 @@ class GARCHVolatility:
 
         self.model = arch_model(
             returns_pct,
-            vol='Garch',
+            vol='GARCH',
             p=self.p,
             q=self.q,
-            dist=dist
+            dist=dist  # type: ignore[arg-type]
         )
 
         with warnings.catch_warnings():
@@ -152,7 +152,8 @@ class GARCHVolatility:
         """Get the conditional volatility series."""
         if self.results is None:
             raise ValueError("Model must be fitted first")
-        return self.results.conditional_volatility / 100
+        vol_series = self.results.conditional_volatility / 100
+        return pd.Series(vol_series) if isinstance(vol_series, np.ndarray) else vol_series
 
     def get_parameters(self) -> dict:
         """Get fitted model parameters."""
@@ -272,9 +273,13 @@ class YangZhangVolatility:
         rs = log_ho * (log_ho - log_co) + log_lo * (log_lo - log_co)
 
         # Overnight and close-to-close
-        overnight_var = log_oc.rolling(window=window).var()
-        close_var = log_cc.rolling(window=window).var()
-        rs_var = rs.rolling(window=window).mean()
+        log_oc_series = pd.Series(log_oc) if isinstance(log_oc, np.ndarray) else log_oc
+        log_cc_series = pd.Series(log_cc) if isinstance(log_cc, np.ndarray) else log_cc
+        rs_series = pd.Series(rs) if isinstance(rs, np.ndarray) else rs
+        
+        overnight_var = log_oc_series.rolling(window=window).var()
+        close_var = log_cc_series.rolling(window=window).var()
+        rs_var = rs_series.rolling(window=window).mean()
 
         # Yang-Zhang
         k = 0.34 / (1.34 + (window + 1) / (window - 1))
@@ -311,7 +316,10 @@ class CreditSpreadVolatility:
         if method == 'ewma':
             vol_model = EWMAVolatility(lambda_param=lambda_param)
             vol_model.fit(spread_changes)
-            return vol_model.volatility_series
+            if vol_model.volatility_series is not None:
+                return vol_model.volatility_series
+            else:
+                raise ValueError("EWMA volatility calculation failed")
 
         elif method == 'rolling':
             return spread_changes.rolling(window=window).std()
@@ -362,7 +370,7 @@ class CreditSpreadVolatility:
         Returns:
             Volatility series
         """
-        return spread_matrix.std(axis=axis)
+        return spread_matrix.std(axis=axis)  # type: ignore[arg-type]
 
 
 class VolatilityForecaster:

@@ -115,12 +115,13 @@ class RiskMetrics:
             return 0.0
 
         annualized_return = np.mean(returns) * periods_per_year
-        max_dd = RiskMetrics.max_drawdown(returns)
+        max_dd = RiskMetrics.max_drawdown(returns, return_series=False)
+        assert isinstance(max_dd, (float, np.floating)), "max_dd should be float"
 
         if max_dd == 0:
             return 0.0
 
-        return annualized_return / abs(max_dd)
+        return float(annualized_return / abs(float(max_dd)))
 
     @staticmethod
     def value_at_risk(
@@ -143,13 +144,13 @@ class RiskMetrics:
             return 0.0
 
         if method == 'historical':
-            return -np.percentile(returns, (1 - confidence_level) * 100)
+            return float(-np.percentile(returns, (1 - confidence_level) * 100))
 
         elif method == 'parametric':
             mu = np.mean(returns)
             sigma = np.std(returns)
             z_score = stats.norm.ppf(1 - confidence_level)
-            return -(mu + z_score * sigma)
+            return float(-(mu + z_score * sigma))
 
         elif method == 'cornish_fisher':
             mu = np.mean(returns)
@@ -191,7 +192,7 @@ class RiskMetrics:
         if len(returns_beyond_var) == 0:
             return var
 
-        return -np.mean(returns_beyond_var)
+        return float(-np.mean(returns_beyond_var))
 
     @staticmethod
     def information_ratio(
@@ -313,9 +314,9 @@ class CreditRiskMetrics:
         mean = np.mean(returns)
         std = np.std(returns)
 
-        jumps = np.abs(returns - mean) > (threshold * std)
-        n_jumps = np.sum(jumps)
-        jump_frequency = n_jumps / len(returns)
+        jumps = np.abs(returns - mean) > (threshold * std)  # type: ignore[operator]
+        n_jumps = int(np.sum(jumps))
+        jump_frequency = float(n_jumps / len(returns))
 
         return jump_frequency, n_jumps
 
@@ -376,9 +377,10 @@ def calculate_portfolio_metrics(
     metrics = {}
 
     # Return metrics
-    metrics['total_return'] = (1 + pd.Series(returns)).prod() - 1
-    metrics['annualized_return'] = np.mean(returns) * periods_per_year
-    metrics['volatility'] = np.std(returns) * np.sqrt(periods_per_year)
+    returns_series = pd.Series(returns) if isinstance(returns, np.ndarray) else returns
+    metrics['total_return'] = float((1 + returns_series).prod() - 1)  # type: ignore[operator]
+    metrics['annualized_return'] = float(np.mean(returns) * periods_per_year)
+    metrics['volatility'] = float(np.std(returns) * np.sqrt(periods_per_year))
 
     # Risk-adjusted metrics
     metrics['sharpe_ratio'] = RiskMetrics.sharpe_ratio(returns, risk_free_rate, periods_per_year)

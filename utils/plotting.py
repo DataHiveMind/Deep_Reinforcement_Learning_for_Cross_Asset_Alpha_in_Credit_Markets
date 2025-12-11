@@ -27,7 +27,8 @@ class PerformancePlotter:
         returns: Union[pd.Series, pd.DataFrame],
         benchmark: Optional[pd.Series] = None,
         title: str = "Cumulative Returns",
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot cumulative returns over time.
@@ -37,6 +38,7 @@ class PerformancePlotter:
             benchmark: Optional benchmark returns
             title: Plot title
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/cumulative_returns.png')
 
         Returns:
             Matplotlib figure
@@ -63,13 +65,17 @@ class PerformancePlotter:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
     @staticmethod
     def plot_drawdown(
         returns: pd.Series,
         title: str = "Drawdown",
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot drawdown over time.
@@ -78,6 +84,7 @@ class PerformancePlotter:
             returns: Returns series
             title: Plot title
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/drawdown.png')
 
         Returns:
             Matplotlib figure
@@ -99,6 +106,9 @@ class PerformancePlotter:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
     @staticmethod
@@ -106,7 +116,8 @@ class PerformancePlotter:
         returns: pd.Series,
         metrics: List[str] = ['sharpe', 'volatility'],
         window: int = 252,
-        figsize: Tuple[int, int] = (12, 8)
+        figsize: Tuple[int, int] = (12, 8),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot rolling performance metrics.
@@ -116,6 +127,7 @@ class PerformancePlotter:
             metrics: List of metrics to plot
             window: Rolling window size
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/rolling_metrics.png')
 
         Returns:
             Matplotlib figure
@@ -150,13 +162,17 @@ class PerformancePlotter:
         axes[-1].set_xlabel('Date')
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
     @staticmethod
     def plot_returns_distribution(
         returns: pd.Series,
         bins: int = 50,
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot returns distribution with statistics.
@@ -165,6 +181,7 @@ class PerformancePlotter:
             returns: Returns series
             bins: Number of histogram bins
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/returns_dist.png')
 
         Returns:
             Matplotlib figure
@@ -187,6 +204,9 @@ class PerformancePlotter:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
 
@@ -197,7 +217,8 @@ class RiskPlotter:
     def plot_var_cvar(
         returns: pd.Series,
         confidence_levels: List[float] = [0.95, 0.99],
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot VaR and CVaR on returns distribution.
@@ -206,6 +227,7 @@ class RiskPlotter:
             returns: Returns series
             confidence_levels: List of confidence levels
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/var_cvar.png')
 
         Returns:
             Matplotlib figure
@@ -233,13 +255,17 @@ class RiskPlotter:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
     @staticmethod
     def plot_correlation_matrix(
         returns_df: pd.DataFrame,
         method: Literal['pearson', 'kendall', 'spearman'] = 'pearson',
-        figsize: Tuple[int, int] = (10, 8)
+        figsize: Tuple[int, int] = (10, 8),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot correlation matrix heatmap.
@@ -248,6 +274,7 @@ class RiskPlotter:
             returns_df: DataFrame of returns (multiple assets)
             method: Correlation method ('pearson', 'spearman', 'kendall')
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/correlation.png')
 
         Returns:
             Matplotlib figure
@@ -263,6 +290,9 @@ class RiskPlotter:
         ax.set_title(f'{method.capitalize()} Correlation Matrix')
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
     @staticmethod
@@ -272,7 +302,8 @@ class RiskPlotter:
         window: int = 60,
         label1: str = 'Asset 1',
         label2: str = 'Asset 2',
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot rolling correlation between two return series.
@@ -284,6 +315,7 @@ class RiskPlotter:
             label1: Label for first asset
             label2: Label for second asset
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/rolling_corr.png')
 
         Returns:
             Matplotlib figure
@@ -304,6 +336,9 @@ class RiskPlotter:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
 
@@ -314,7 +349,8 @@ class CreditPlotter:
     def plot_spread_evolution(
         spreads_df: pd.DataFrame,
         title: str = "Credit Spread Evolution",
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot credit spread evolution over time.
@@ -323,6 +359,7 @@ class CreditPlotter:
             spreads_df: DataFrame with spreads (time x assets)
             title: Plot title
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/spread_evolution.png')
 
         Returns:
             Matplotlib figure
@@ -339,13 +376,17 @@ class CreditPlotter:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
     @staticmethod
     def plot_spread_distribution(
         spreads: pd.Series,
         bins: int = 30,
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot credit spread distribution.
@@ -354,6 +395,7 @@ class CreditPlotter:
             spreads: Credit spread series
             bins: Number of bins
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/spread_dist.png')
 
         Returns:
             Matplotlib figure
@@ -377,13 +419,18 @@ class CreditPlotter:
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
         return fig
 
     @staticmethod
     def plot_spread_by_rating(
         spreads_df: pd.DataFrame,
         ratings: pd.Series,
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot spreads grouped by credit rating.
@@ -392,6 +439,7 @@ class CreditPlotter:
             spreads_df: DataFrame of spreads
             ratings: Series of credit ratings
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/spread_by_rating.png')
 
         Returns:
             Matplotlib figure
@@ -414,6 +462,9 @@ class CreditPlotter:
         ax.grid(True, alpha=0.3)
         plt.tight_layout()
 
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+
         return fig
 
 
@@ -424,7 +475,8 @@ class TradingPlotter:
     def plot_positions(
         positions: pd.DataFrame,
         prices: Optional[pd.DataFrame] = None,
-        figsize: Tuple[int, int] = (12, 8)
+        figsize: Tuple[int, int] = (12, 8),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot positions over time.
@@ -433,6 +485,7 @@ class TradingPlotter:
             positions: DataFrame of positions
             prices: Optional price data
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/positions.png')
 
         Returns:
             Matplotlib figure
@@ -470,12 +523,17 @@ class TradingPlotter:
             ax.axhline(y=0, color='black', linestyle='--', alpha=0.5)
 
         plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
         return fig
 
     @staticmethod
     def plot_trade_pnl(
         trades_df: pd.DataFrame,
-        figsize: Tuple[int, int] = (12, 6)
+        figsize: Tuple[int, int] = (12, 6),
+        save_path: Optional[str] = None
     ) -> Figure:
         """
         Plot individual trade P&L.
@@ -483,6 +541,7 @@ class TradingPlotter:
         Args:
             trades_df: DataFrame with trade info (must have 'pnl' column)
             figsize: Figure size
+            save_path: Optional path to save figure (e.g., 'plots/trade_pnl.png')
 
         Returns:
             Matplotlib figure
@@ -507,6 +566,10 @@ class TradingPlotter:
         ax2.grid(True, alpha=0.3)
 
         plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
         return fig
 
 
