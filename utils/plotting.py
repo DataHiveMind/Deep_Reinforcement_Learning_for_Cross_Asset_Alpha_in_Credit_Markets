@@ -5,12 +5,13 @@ This module provides comprehensive visualization tools for backtesting results,
 portfolio performance, risk metrics, and credit market analysis.
 """
 
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.figure import Figure
 
 # Set plotting style
 sns.set_style("darkgrid")
@@ -27,7 +28,7 @@ class PerformancePlotter:
         benchmark: Optional[pd.Series] = None,
         title: str = "Cumulative Returns",
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot cumulative returns over time.
 
@@ -44,15 +45,15 @@ class PerformancePlotter:
 
         if isinstance(returns, pd.Series):
             cumulative = (1 + returns).cumprod()
-            ax.plot(cumulative.index, cumulative.values, label='Strategy', linewidth=2)
+            ax.plot(cumulative.index, np.asarray(cumulative.values), label='Strategy', linewidth=2)
         else:
             for col in returns.columns:
                 cumulative = (1 + returns[col]).cumprod()
-                ax.plot(cumulative.index, cumulative.values, label=col, linewidth=2)
+                ax.plot(cumulative.index, np.asarray(cumulative.values), label=col, linewidth=2)
 
         if benchmark is not None:
             cumulative_bench = (1 + benchmark).cumprod()
-            ax.plot(cumulative_bench.index, cumulative_bench.values,
+            ax.plot(cumulative_bench.index, np.asarray(cumulative_bench.values),
                     label='Benchmark', linestyle='--', linewidth=2, alpha=0.7)
 
         ax.set_xlabel('Date')
@@ -69,7 +70,7 @@ class PerformancePlotter:
         returns: pd.Series,
         title: str = "Drawdown",
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot drawdown over time.
 
@@ -87,9 +88,9 @@ class PerformancePlotter:
         running_max = cumulative.expanding().max()
         drawdown = (cumulative - running_max) / running_max
 
-        ax.fill_between(drawdown.index, drawdown.values, 0,
+        ax.fill_between(drawdown.index, np.asarray(drawdown.values), 0,
                         alpha=0.3, color='red', label='Drawdown')
-        ax.plot(drawdown.index, drawdown.values, color='red', linewidth=1)
+        ax.plot(drawdown.index, np.asarray(drawdown.values), color='red', linewidth=1)
 
         ax.set_xlabel('Date')
         ax.set_ylabel('Drawdown (%)')
@@ -106,7 +107,7 @@ class PerformancePlotter:
         metrics: List[str] = ['sharpe', 'volatility'],
         window: int = 252,
         figsize: Tuple[int, int] = (12, 8)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot rolling performance metrics.
 
@@ -141,7 +142,7 @@ class PerformancePlotter:
             else:
                 continue
 
-            ax.plot(rolling_metric.index, rolling_metric.values, linewidth=2)
+            ax.plot(rolling_metric.index, np.asarray(rolling_metric.values), linewidth=2)
             ax.set_title(title)
             ax.grid(True, alpha=0.3)
             ax.axhline(y=0, color='black', linestyle='--', alpha=0.5)
@@ -156,7 +157,7 @@ class PerformancePlotter:
         returns: pd.Series,
         bins: int = 50,
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot returns distribution with statistics.
 
@@ -197,7 +198,7 @@ class RiskPlotter:
         returns: pd.Series,
         confidence_levels: List[float] = [0.95, 0.99],
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot VaR and CVaR on returns distribution.
 
@@ -217,8 +218,8 @@ class RiskPlotter:
         # Add VaR and CVaR lines
         colors = ['red', 'darkred']
         for conf, color in zip(confidence_levels, colors):
-            var = np.percentile(returns, (1 - conf) * 100)
-            cvar = returns[returns <= var].mean()
+            var = float(np.percentile(returns, (1 - conf) * 100))
+            cvar = float(returns[returns <= var].mean())
 
             ax.axvline(var, color=color, linestyle='--', linewidth=2,
                        label=f'VaR {conf*100}%: {var:.4f}')
@@ -237,9 +238,9 @@ class RiskPlotter:
     @staticmethod
     def plot_correlation_matrix(
         returns_df: pd.DataFrame,
-        method: str = 'pearson',
+        method: Literal['pearson', 'kendall', 'spearman'] = 'pearson',
         figsize: Tuple[int, int] = (10, 8)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot correlation matrix heatmap.
 
@@ -272,7 +273,7 @@ class RiskPlotter:
         label1: str = 'Asset 1',
         label2: str = 'Asset 2',
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot rolling correlation between two return series.
 
@@ -291,7 +292,7 @@ class RiskPlotter:
 
         rolling_corr = returns1.rolling(window).corr(returns2)
 
-        ax.plot(rolling_corr.index, rolling_corr.values, linewidth=2)
+        ax.plot(rolling_corr.index, np.asarray(rolling_corr.values), linewidth=2)
         ax.axhline(y=0, color='black', linestyle='--', alpha=0.5)
         ax.axhline(y=0.5, color='green', linestyle=':', alpha=0.5)
         ax.axhline(y=-0.5, color='red', linestyle=':', alpha=0.5)
@@ -314,7 +315,7 @@ class CreditPlotter:
         spreads_df: pd.DataFrame,
         title: str = "Credit Spread Evolution",
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot credit spread evolution over time.
 
@@ -345,7 +346,7 @@ class CreditPlotter:
         spreads: pd.Series,
         bins: int = 30,
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot credit spread distribution.
 
@@ -383,7 +384,7 @@ class CreditPlotter:
         spreads_df: pd.DataFrame,
         ratings: pd.Series,
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot spreads grouped by credit rating.
 
@@ -404,7 +405,7 @@ class CreditPlotter:
             rating_groups[rating] = spreads_df[cols].mean(axis=1)
 
         for rating, spread_series in rating_groups.items():
-            ax.plot(spread_series.index, spread_series.values, label=rating, linewidth=2)
+            ax.plot(spread_series.index, np.asarray(spread_series.values), label=rating, linewidth=2)
 
         ax.set_xlabel('Date')
         ax.set_ylabel('Average Spread (bps)')
@@ -424,7 +425,7 @@ class TradingPlotter:
         positions: pd.DataFrame,
         prices: Optional[pd.DataFrame] = None,
         figsize: Tuple[int, int] = (12, 8)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot positions over time.
 
@@ -475,7 +476,7 @@ class TradingPlotter:
     def plot_trade_pnl(
         trades_df: pd.DataFrame,
         figsize: Tuple[int, int] = (12, 6)
-    ) -> plt.Figure:
+    ) -> Figure:
         """
         Plot individual trade P&L.
 
@@ -490,7 +491,7 @@ class TradingPlotter:
 
         # Cumulative P&L
         cumulative_pnl = trades_df['pnl'].cumsum()
-        ax1.plot(cumulative_pnl.index, cumulative_pnl.values, linewidth=2)
+        ax1.plot(cumulative_pnl.index, np.asarray(cumulative_pnl.values), linewidth=2)
         ax1.set_xlabel('Trade Number')
         ax1.set_ylabel('Cumulative P&L')
         ax1.set_title('Cumulative P&L')
@@ -514,7 +515,7 @@ def create_performance_report(
     benchmark: Optional[pd.Series] = None,
     positions: Optional[pd.DataFrame] = None,
     save_path: Optional[str] = None
-) -> plt.Figure:
+) -> Figure:
     """
     Create comprehensive performance report.
 
@@ -533,10 +534,10 @@ def create_performance_report(
     # Cumulative returns
     ax1 = fig.add_subplot(gs[0, :])
     cumulative = (1 + returns).cumprod()
-    ax1.plot(cumulative.index, cumulative.values, label='Strategy', linewidth=2)
+    ax1.plot(cumulative.index, np.asarray(cumulative.values), label='Strategy', linewidth=2)
     if benchmark is not None:
         cumulative_bench = (1 + benchmark).cumprod()
-        ax1.plot(cumulative_bench.index, cumulative_bench.values,
+        ax1.plot(cumulative_bench.index, np.asarray(cumulative_bench.values),
                  label='Benchmark', linestyle='--', linewidth=2)
     ax1.set_ylabel('Cumulative Return')
     ax1.set_title('Cumulative Returns')
@@ -547,8 +548,8 @@ def create_performance_report(
     ax2 = fig.add_subplot(gs[1, 0])
     running_max = cumulative.expanding().max()
     drawdown = (cumulative - running_max) / running_max
-    ax2.fill_between(drawdown.index, drawdown.values, 0, alpha=0.3, color='red')
-    ax2.plot(drawdown.index, drawdown.values, color='red', linewidth=1)
+    ax2.fill_between(drawdown.index, np.asarray(drawdown.values), 0, alpha=0.3, color='red')
+    ax2.plot(drawdown.index, np.asarray(drawdown.values), color='red', linewidth=1)
     ax2.set_ylabel('Drawdown')
     ax2.set_title('Drawdown')
     ax2.grid(True, alpha=0.3)
@@ -565,7 +566,7 @@ def create_performance_report(
     # Rolling Sharpe
     ax4 = fig.add_subplot(gs[2, 0])
     rolling_sharpe = returns.rolling(60).mean() / returns.rolling(60).std() * np.sqrt(252)
-    ax4.plot(rolling_sharpe.index, rolling_sharpe.values, linewidth=2)
+    ax4.plot(rolling_sharpe.index, np.asarray(rolling_sharpe.values), linewidth=2)
     ax4.axhline(y=0, color='black', linestyle='--', alpha=0.5)
     ax4.set_xlabel('Date')
     ax4.set_ylabel('Sharpe Ratio')
@@ -574,15 +575,19 @@ def create_performance_report(
 
     # Monthly returns heatmap
     ax5 = fig.add_subplot(gs[2, 1])
-    monthly_returns = returns.resample('M').apply(lambda x: (1 + x).prod() - 1)
-    if len(monthly_returns) > 0:
-        monthly_pivot = monthly_returns.to_frame('ret')
-        monthly_pivot['year'] = monthly_pivot.index.year
-        monthly_pivot['month'] = monthly_pivot.index.month
-        monthly_pivot = monthly_pivot.pivot(index='year', columns='month', values='ret')
-        sns.heatmap(monthly_pivot, annot=True, fmt='.2%', cmap='RdYlGn',
-                    center=0, ax=ax5, cbar_kws={'label': 'Monthly Return'})
-        ax5.set_title('Monthly Returns')
+    if isinstance(returns.index, pd.DatetimeIndex):
+        monthly_returns = returns.resample('M').apply(lambda x: (1 + x).prod() - 1)
+        if len(monthly_returns) > 0:
+            dt_index = pd.DatetimeIndex(monthly_returns.index)
+            monthly_df = pd.DataFrame({
+                'ret': monthly_returns.values,
+                'year': dt_index.year,
+                'month': dt_index.month
+            })
+            monthly_pivot = monthly_df.pivot(index='year', columns='month', values='ret')
+            sns.heatmap(monthly_pivot, annot=True, fmt='.2%', cmap='RdYlGn',
+                        center=0, ax=ax5, cbar_kws={'label': 'Monthly Return'})
+            ax5.set_title('Monthly Returns')
 
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
