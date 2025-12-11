@@ -1,0 +1,371 @@
+# PPO Configuration for Credit Spread Trading
+# Proximal Policy Optimization with continuous action space
+# Focus: Single-name and index credit spread strategies with optimal position sizing
+
+# Inherit base configuration
+extends: "base.yaml"
+
+# ==============================================================================
+# EXPERIMENT METADATA
+# ==============================================================================
+experiment:
+  name: "ppo_credit_spreads"
+  description: "PPO agent for credit spread trading with continuous position sizing"
+  tags: ["ppo", "credit-spreads", "continuous-actions", "policy-gradient"]
+  version: "1.0.0"
+
+# ==============================================================================
+# ENVIRONMENT OVERRIDES
+# ==============================================================================
+environment:
+  env_class: "credit_spread_env"
+
+  # Action space: Continuous position sizing
+  action:
+    type: "continuous"
+    continuous_bounds: [-1.0, 1.0] # -1 = full short, +1 = full long
+    action_scaling: "tanh" # Smooth action space scaling
+
+  # Observation space focused on spread dynamics
+  observation:
+    normalize: true
+    normalization_method: "standard"
+    include_history: true
+    history_length: 20 # Shorter history for spread momentum
+
+    # Credit spread specific features
+    spread_features:
+      - "oas_level"
+      - "oas_z_score"
+      - "oas_percentile"
+      - "oas_velocity"
+      - "oas_acceleration"
+      - "spread_vs_historical_mean"
+      - "spread_vs_sector_mean"
+      - "credit_cycle_phase"
+
+  # Reward function: Risk-adjusted returns with spread carry
+  reward:
+    type: "risk_adjusted_returns"
+    risk_free_rate: 0.02
+
+    components:
+      - name: "pnl"
+        weight: 0.6
+      - name: "carry_income"
+        weight: 0.2
+      - name: "sharpe_contribution"
+        weight: 0.2
+
+    # Reward shaping
+    reward_shaping:
+      normalize_rewards: true
+      clip_rewards: false
+      reward_scale: 1.0
+
+    transaction_cost_bps: 8
+    slippage_bps: 4
+
+    # Penalties
+    penalties:
+      excess_turnover: 0.001 # Penalize excessive trading
+      concentration_risk: 0.005 # Penalize concentration
+      drawdown_penalty_threshold: 0.10 # Penalize if DD > 10%
+
+# ==============================================================================
+# AGENT CONFIGURATION - PPO SPECIFIC
+# ==============================================================================
+agent:
+  algorithm: "PPO"
+  device: "cpu"
+  seed: 42
+
+  # PPO hyperparameters
+  training:
+    total_timesteps: 1_500_000
+
+    # Rollout settings
+    n_steps: 2048 # Steps per rollout (experience before update)
+    n_envs: 8 # Number of parallel environments
+    batch_size: 64 # Minibatch size
+    n_epochs: 10 # Number of epochs per update
+
+    # Learning rate
+    learning_rate: 3.0e-4
+    lr_schedule: "linear" # Linear decay to 0
+
+    # PPO clipping
+    clip_range: 0.2 # PPO clip parameter
+    clip_range_schedule: "linear" # Can decay clip range
+    clip_range_vf: null # No separate clipping for value function
+
+    # Optimization
+    gamma: 0.99 # Discount factor
+    gae_lambda: 0.95 # GAE parameter for advantage estimation
+    normalize_advantage: true
+
+    # Value function
+    vf_coef: 0.5 # Value function loss coefficient
+
+    # Entropy bonus (exploration)
+    ent_coef: 0.01 # Entropy coefficient (higher = more exploration)
+    ent_coef_schedule: "linear" # Decay entropy bonus
+    ent_coef_final: 0.001
+
+    # Gradient settings
+    max_grad_norm: 0.5 # Gradient clipping
+    use_sde: false # State-dependent exploration (gSDE)
+    sde_sample_freq: -1
+
+    # Optimization
+    optimizer: "Adam"
+    optimizer_kwargs:
+      eps: 1.0e-5
+      weight_decay: 0.0
+
+  # Network Architecture - Actor-Critic
+  network:
+    type: "actor_critic"
+    shared_features: false # Separate feature extraction for policy and value
+
+    # Policy network (actor)
+    policy_net:
+      hidden_layers: [256, 256, 128]
+      activation: "tanh" # Tanh for continuous control
+      layer_norm: true
+      dropout: 0.0
+
+      # Output layer for continuous actions
+      log_std_init: 0.0 # Initial log std for Gaussian policy
+      squash_output: true # Use tanh to bound actions
+
+    # Value network (critic)
+    value_net:
+      hidden_layers: [256, 256, 128]
+      activation: "relu"
+      layer_norm: true
+      dropout: 0.0
+
+    # Feature extractor (if shared)
+    feature_extractor:
+      hidden_layers: [256, 256]
+      activation: "relu"
+
+    # Initialization
+    initialization: "orthogonal"
+    init_scale: 1.0
+
+  # Generalized Advantage Estimation (GAE)
+  gae:
+    enabled: true
+    lambda_: 0.95 # GAE lambda for bias-variance tradeoff
+    normalize: true # Normalize advantages
+
+  # Trust region considerations
+  target_kl: 0.01 # Target KL divergence (for early stopping)
+  early_stop_on_kl: false # Stop epoch if KL > target_kl
+
+# ==============================================================================
+# DATA CONFIGURATION OVERRIDES
+# ==============================================================================
+data:
+  # Focus on credit spread instruments
+  focus_instruments:
+    primary:
+      - "LQD" # IG Corporate Bond ETF
+      - "VCIT" # Intermediate-Term Corporate Bond ETF
+      - "VCSH" # Short-Term Corporate Bond ETF
+      - "HYG" # High Yield Corporate Bond ETF
+      - "JNK" # High Yield Bond ETF
+
+    benchmarks:
+      - "IEF" # Treasury benchmark
+      - "AGG" # Aggregate bond benchmark
+
+  # Additional features for spread trading
+  features:
+    technical_indicators:
+      - "spread_rsi"
+      - "spread_macd"
+      - "spread_bollinger"
+      - "spread_momentum_20d"
+      - "spread_mean_reversion_z"
+
+    fundamental:
+      - "sector_spread_average"
+      - "rating_spread_average"
+      - "maturity_spread_average"
+
+# ==============================================================================
+# TRAINING CONFIGURATION
+# ==============================================================================
+training:
+  # Evaluation
+  evaluation:
+    frequency: 20_480 # Every 10 rollouts
+    n_eval_episodes: 50
+    deterministic: true # Use mean action (no sampling)
+
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 50 # Rollouts without improvement
+    min_delta: 0.005
+    metric: "eval/mean_reward"
+    mode: "max"
+
+  # Reward scaling (important for PPO)
+  reward_scaling:
+    method: "running_mean_std" # Normalize rewards using running statistics
+    clip_reward: 10.0 # Clip normalized rewards
+
+  # Advantage estimation tuning
+  advantage_estimation:
+    method: "gae" # Generalized Advantage Estimation
+    normalize: true
+    clip_advantages: false
+
+# ==============================================================================
+# BACKTESTING OVERRIDES
+# ==============================================================================
+backtesting:
+  # Credit spread specific metrics
+  metrics:
+    - "sharpe_ratio"
+    - "sortino_ratio"
+    - "calmar_ratio"
+    - "information_ratio"
+    - "max_drawdown"
+    - "avg_drawdown"
+    - "recovery_time"
+    - "annualized_return"
+    - "annualized_volatility"
+    - "win_rate"
+    - "profit_factor"
+    - "spread_capture_rate"
+    - "carry_contribution"
+    - "duration_contribution"
+    - "turnover"
+    - "average_holding_period"
+
+  # Position analysis
+  position_analysis:
+    enabled: true
+    track_position_distribution: true
+    analyze_entry_exit_timing: true
+    spread_regime_performance: true
+
+  # Spread strategy analysis
+  spread_analysis:
+    enabled: true
+    spread_quantiles: [0.1, 0.25, 0.5, 0.75, 0.9] # Performance by spread level
+    carry_analysis: true
+    mean_reversion_analysis: true
+
+# ==============================================================================
+# RISK MANAGEMENT OVERRIDES
+# ==============================================================================
+risk_management:
+  # Position limits for credit
+  position_limits:
+    max_single_position: 0.3 # 30% max in single instrument
+    max_sector_exposure: 0.5 # 50% max in single sector
+    max_rating_concentration: 0.6 # 60% max in single rating bucket
+    min_diversification_score: 0.3 # Minimum diversification
+
+  # Spread-specific risk controls
+  spread_risk:
+    max_spread_widening_threshold: 0.50 # Exit if spread widens 50%+
+    min_spread_level_bps: 50 # Don't trade spreads < 50bps
+    max_spread_level_bps: 1000 # Don't trade spreads > 1000bps
+
+  # Duration risk
+  duration_risk:
+    max_duration_years: 8.0
+    duration_neutral_tolerance: 1.0 # Allow +/- 1 year duration
+
+  # Volatility targeting
+  vol_targeting:
+    enabled: true
+    target_vol_annual: 0.08 # 8% annual volatility target
+    rebalance_threshold: 0.015 # Rebalance if vol differs by 1.5%
+    scaling_method: "inverse_vol"
+
+  # Dynamic position sizing
+  position_sizing:
+    method: "risk_parity" # Options: equal_weight, risk_parity, vol_target
+    vol_lookback: 63 # Days for volatility estimation
+    max_leverage: 1.0
+
+# ==============================================================================
+# LOGGING OVERRIDES
+# ==============================================================================
+logging:
+  # PPO-specific metrics
+  custom_metrics:
+    - "train/policy_loss"
+    - "train/value_loss"
+    - "train/entropy_loss"
+    - "train/approx_kl"
+    - "train/clip_fraction"
+    - "train/clip_range"
+    - "train/explained_variance"
+    - "train/learning_rate"
+    - "train/std_actions"
+    - "rollout/ep_len_mean"
+    - "rollout/ep_rew_mean"
+
+  # Credit strategy logging
+  strategy_logging:
+    log_spread_levels: true
+    log_position_sizing: true
+    log_carry_income: true
+    log_duration_exposure: true
+
+  checkpointing:
+    save_frequency: 20_480 # Every 10 rollouts
+    keep_best_n: 8
+    metric: "eval/sharpe_ratio"
+
+  # Tensorboard organization
+  tensorboard:
+    log_interval: 1 # Log every step (will be aggregated)
+    histogram_freq: 10 # Log histograms every 10 rollouts
+    log_distributions:
+      - "actions"
+      - "rewards"
+      - "advantages"
+      - "value_predictions"
+
+# ==============================================================================
+# HYPERPARAMETER SEARCH (Optional)
+# ==============================================================================
+hyperparameter_search:
+  enabled: false
+  method: "optuna" # Options: optuna, grid, random
+
+  search_space:
+    learning_rate:
+      type: "loguniform"
+      low: 1.0e-5
+      high: 1.0e-3
+
+    clip_range:
+      type: "uniform"
+      low: 0.1
+      high: 0.3
+
+    ent_coef:
+      type: "loguniform"
+      low: 1.0e-4
+      high: 1.0e-1
+
+    gae_lambda:
+      type: "uniform"
+      low: 0.9
+      high: 0.99
+
+  n_trials: 50
+  n_jobs: 4
+  optimization_metric: "eval/sharpe_ratio"
+  optimization_direction: "maximize"

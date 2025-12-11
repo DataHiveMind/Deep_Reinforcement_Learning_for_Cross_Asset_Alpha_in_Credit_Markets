@@ -1,0 +1,296 @@
+# DQN Configuration for Cross-Asset Arbitrage Trading
+# Deep Q-Network with Dueling Architecture and Prioritized Experience Replay
+# Focus: Multi-asset arbitrage across bonds, CDS, ETFs, and equities
+
+# Inherit base configuration
+extends: "base.yaml"
+
+# ==============================================================================
+# EXPERIMENT METADATA
+# ==============================================================================
+experiment:
+  name: "dqn_crossasset_arbitrage"
+  description: "DQN agent for cross-asset relative value trading in credit markets"
+  tags: ["dqn", "cross-asset", "arbitrage", "discrete-actions"]
+  version: "1.0.0"
+
+# ==============================================================================
+# ENVIRONMENT OVERRIDES
+# ==============================================================================
+environment:
+  env_class: "cross_asset_env"
+
+  # Action space: Discrete buy/sell/hold decisions
+  action:
+    type: "discrete"
+    discrete_actions: ["STRONG_BUY", "BUY", "HOLD", "SELL", "STRONG_SELL"]
+    position_sizes: [1.0, 0.5, 0.0, -0.5, -1.0] # Corresponding position sizes
+
+  # Observation space includes cross-asset relationships
+  observation:
+    normalize: true
+    normalization_method: "robust" # Robust to outliers in credit spreads
+    include_history: true
+    history_length: 30 # Longer history for mean-reversion strategies
+
+    # Cross-asset specific features
+    cross_asset_features:
+      - "cds_bond_basis"
+      - "cash_synthetic_basis"
+      - "etf_nav_premium"
+      - "ig_hy_spread_ratio"
+      - "equity_credit_correlation_rolling"
+      - "credit_equity_beta"
+
+  # Reward focused on arbitrage opportunities
+  reward:
+    type: "arbitrage_profit"
+    components:
+      - name: "basis_capture"
+        weight: 0.5
+      - name: "carry_income"
+        weight: 0.2
+      - name: "mean_reversion_profit"
+        weight: 0.3
+
+    transaction_cost_bps: 12 # Higher costs for multi-leg arbitrage
+    slippage_bps: 8
+
+    # Arbitrage-specific penalties
+    penalties:
+      convergence_timeout: 0.01 # Penalty if basis doesn't converge
+      correlation_breakdown: 0.02 # Penalty if historical correlation breaks
+
+# ==============================================================================
+# AGENT CONFIGURATION - DQN SPECIFIC
+# ==============================================================================
+agent:
+  algorithm: "DQN"
+  device: "cpu"
+  seed: 42
+
+  # DQN hyperparameters
+  training:
+    total_timesteps: 2_000_000 # DQN needs more samples
+    learning_rate: 1.0e-4
+    lr_schedule: "linear"
+
+    # Buffer and batch settings
+    buffer_size: 1_000_000 # Large replay buffer
+    batch_size: 128
+    learning_starts: 10_000 # Start learning after sufficient exploration
+    train_frequency: 4 # Update every 4 steps
+    gradient_steps: 1
+
+    # Target network
+    target_update_interval: 10_000 # Update target network every 10k steps
+    tau: 1.0 # Hard update (copy weights completely)
+
+    # Optimization
+    gamma: 0.99 # Discount factor
+    optimizer: "Adam"
+    optimizer_kwargs:
+      eps: 1.0e-5
+      weight_decay: 0.0
+    max_grad_norm: 10.0 # Gradient clipping
+
+  # DQN Network Architecture - Dueling Architecture
+  network:
+    type: "dueling" # Dueling DQN architecture
+
+    # Shared feature extractor
+    feature_extractor:
+      hidden_layers: [512, 512, 256]
+      activation: "relu"
+      layer_norm: true
+      dropout: 0.1
+
+    # Value stream (V(s))
+    value_stream:
+      hidden_layers: [256, 128]
+      activation: "relu"
+      dropout: 0.0
+
+    # Advantage stream (A(s,a))
+    advantage_stream:
+      hidden_layers: [256, 128]
+      activation: "relu"
+      dropout: 0.0
+
+    # Initialization
+    initialization: "orthogonal"
+    init_scale: 1.0
+
+  # Exploration Strategy
+  exploration:
+    strategy: "epsilon_greedy"
+    initial_epsilon: 1.0
+    final_epsilon: 0.05 # Maintain some exploration
+    epsilon_decay_steps: 500_000
+    epsilon_schedule: "exponential" # Exponential decay
+
+  # Double DQN
+  double_q: true # Use Double DQN to reduce overestimation bias
+
+  # Prioritized Experience Replay (PER)
+  prioritized_replay:
+    enabled: true
+    alpha: 0.6 # Priority exponent (0=uniform, 1=full prioritization)
+    beta: 0.4 # Importance sampling exponent
+    beta_schedule: "linear" # Linearly anneal beta to 1.0
+    beta_final: 1.0
+    epsilon: 1.0e-6 # Small constant to ensure non-zero priorities
+
+  # Multi-step returns (n-step DQN)
+  n_step:
+    enabled: true
+    n_steps: 3 # Use 3-step returns for faster credit propagation
+
+# ==============================================================================
+# DATA CONFIGURATION OVERRIDES
+# ==============================================================================
+data:
+  # Focus on cross-asset instruments
+  focus_instruments:
+    primary:
+      - "LQD" # IG Corporate
+      - "HYG" # HY Corporate
+      - "IEF" # Treasury benchmark
+      - "SPY" # Equity benchmark
+
+    arbitrage_pairs:
+      - pair: ["LQD", "IEF"]
+        type: "credit_spread"
+      - pair: ["HYG", "LQD"]
+        type: "quality_spread"
+      - pair: ["LQD", "SPY"]
+        type: "credit_equity"
+
+  # Additional cross-asset features
+  features:
+    cross_asset_ratios:
+      - "hy_ig_ratio"
+      - "credit_treasury_ratio"
+      - "credit_equity_beta"
+      - "vol_adjusted_spread"
+
+# ==============================================================================
+# TRAINING CONFIGURATION
+# ==============================================================================
+training:
+  # Evaluation settings
+  evaluation:
+    frequency: 10_000 # Evaluate every 10k steps
+    n_eval_episodes: 20
+    deterministic: true # Use greedy policy for evaluation
+
+  # Early stopping
+  early_stopping:
+    enabled: true
+    patience: 100_000 # Steps without improvement
+    min_delta: 0.01
+    metric: "eval/mean_reward"
+    mode: "max"
+
+  # Curriculum learning for arbitrage complexity
+  curriculum:
+    enabled: true
+    stages:
+      - stage: 1
+        name: "simple_spread"
+        steps: 200_000
+        instruments: ["LQD", "IEF"]
+        complexity: "low"
+
+      - stage: 2
+        name: "multi_spread"
+        steps: 500_000
+        instruments: ["LQD", "HYG", "IEF"]
+        complexity: "medium"
+
+      - stage: 3
+        name: "full_crossasset"
+        steps: 1_300_000
+        instruments: "all"
+        complexity: "high"
+
+# ==============================================================================
+# BACKTESTING OVERRIDES
+# ==============================================================================
+backtesting:
+  # Arbitrage-specific metrics
+  metrics:
+    - "sharpe_ratio"
+    - "sortino_ratio"
+    - "calmar_ratio"
+    - "max_drawdown"
+    - "annualized_return"
+    - "basis_capture_rate"
+    - "arbitrage_convergence_rate"
+    - "avg_holding_period"
+    - "win_rate_by_arbitrage_type"
+    - "correlation_stability"
+
+  # Transaction costs for multi-leg trades
+  transaction_costs:
+    model: "realistic"
+
+    # Multi-leg execution costs
+    multi_leg_penalty: 1.2 # 20% additional cost for simultaneous execution
+
+    # Leg execution timing
+    execution_lag:
+      first_leg: 0 # Execute immediately
+      second_leg: 30 # 30 second delay (execution risk)
+
+  # Arbitrage-specific analysis
+  arbitrage_analysis:
+    enabled: true
+    track_basis_convergence: true
+    convergence_threshold_bps: 5 # Consider converged if within 5bps
+    max_convergence_days: 60 # Maximum holding period
+
+# ==============================================================================
+# RISK MANAGEMENT OVERRIDES
+# ==============================================================================
+risk_management:
+  # Arbitrage-specific risk controls
+  arbitrage_limits:
+    max_basis_size_bps: 200 # Don't trade if basis > 200bps (too wide)
+    min_basis_size_bps: 10 # Don't trade if basis < 10bps (not worth it)
+    max_leg_correlation: 0.95 # Require some decorrelation
+    min_leg_liquidity: 1_000_000 # Minimum daily volume per leg
+
+  # Correlation monitoring
+  correlation_risk:
+    enabled: true
+    correlation_window: 126 # 6 months
+    min_stable_correlation: 0.50 # Minimum historical correlation
+    correlation_break_threshold: 0.30 # Exit if correlation drops by 30%
+
+# ==============================================================================
+# LOGGING OVERRIDES
+# ==============================================================================
+logging:
+  # DQN-specific metrics
+  custom_metrics:
+    - "epsilon_value"
+    - "td_error_mean"
+    - "td_error_std"
+    - "per_beta_value"
+    - "replay_buffer_size"
+    - "q_value_mean"
+    - "q_value_std"
+    - "loss/q_loss"
+    - "loss/huber_loss"
+
+  # Arbitrage tracking
+  arbitrage_logging:
+    log_basis_levels: true
+    log_convergence_events: true
+    log_failed_arbitrages: true
+
+  checkpointing:
+    save_frequency: 25_000
+    keep_best_n: 10
+    metric: "eval/sharpe_ratio"

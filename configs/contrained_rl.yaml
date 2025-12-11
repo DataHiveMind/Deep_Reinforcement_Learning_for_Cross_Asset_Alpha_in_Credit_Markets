@@ -1,0 +1,439 @@
+# Constrained RL Configuration for Risk-Managed Credit Trading
+# Constrained Policy Optimization (CPO) with hard risk constraints
+# Focus: Institutional-grade risk management with guaranteed constraint satisfaction
+
+# Inherit base configuration
+extends: "base.yaml"
+
+# ==============================================================================
+# EXPERIMENT METADATA
+# ==============================================================================
+experiment:
+  name: "constrained_credit_rl"
+  description: "Safe RL with hard constraints on VaR, drawdown, and sector exposure"
+  tags: ["constrained-rl", "cpo", "risk-managed", "institutional"]
+  version: "1.0.0"
+
+# ==============================================================================
+# ENVIRONMENT OVERRIDES
+# ==============================================================================
+environment:
+  env_class: "cross_asset_env"
+
+  # Action space: Continuous with safety constraints
+  action:
+    type: "continuous"
+    continuous_bounds: [-1.0, 1.0]
+    action_safety_filter: true # Filter actions to satisfy constraints
+
+  # Observation space includes risk metrics
+  observation:
+    normalize: true
+    normalization_method: "robust"
+    include_history: true
+    history_length: 20
+
+    # Risk-aware features
+    risk_features:
+      - "portfolio_var_95"
+      - "portfolio_cvar_95"
+      - "current_drawdown"
+      - "volatility_realized"
+      - "volatility_forecast"
+      - "sector_concentration_hhi"
+      - "rating_concentration_hhi"
+      - "duration_exposure"
+      - "beta_to_market"
+
+  # Reward with constraint violations as penalties
+  reward:
+    type: "constrained_returns"
+
+    # Primary reward: risk-adjusted returns
+    primary_reward:
+      type: "sharpe_ratio"
+      lookback: 252
+
+    # Constraint violations (Lagrangian penalties)
+    constraint_penalties:
+      var_violation: 10.0 # High penalty for VaR breaches
+      drawdown_violation: 15.0 # Very high penalty for drawdown breaches
+      concentration_violation: 5.0 # Moderate penalty for concentration
+      duration_violation: 3.0 # Lower penalty for duration drift
+
+    transaction_cost_bps: 10
+    slippage_bps: 6
+
+# ==============================================================================
+# AGENT CONFIGURATION - CONSTRAINED RL SPECIFIC
+# ==============================================================================
+agent:
+  algorithm: "CPO" # Constrained Policy Optimization
+  device: "cpu"
+  seed: 42
+
+  # CPO hyperparameters
+  training:
+    total_timesteps: 2_000_000
+
+    # Rollout settings (similar to PPO)
+    n_steps: 4096 # Larger rollouts for better constraint estimation
+    n_envs: 4 # Fewer parallel envs due to constraint complexity
+    batch_size: 128
+    n_epochs: 15 # More epochs for constraint satisfaction
+
+    # Learning rates
+    learning_rate: 1.0e-4 # Lower LR for stable constraint learning
+    lr_schedule: "constant" # Keep constant for stability
+
+    # CPO-specific parameters
+    cost_limit: 0.1 # Maximum allowable constraint violation per episode
+    damping_coeff: 0.1 # Damping for conjugate gradient
+    num_conjugate: 10 # Number of conjugate gradient iterations
+    line_search_steps: 10 # Line search steps for step size
+
+    # Advantage estimation
+    gamma: 0.99
+    gae_lambda: 0.95
+    normalize_advantage: true
+
+    # Cost (constraint) advantage estimation
+    cost_gamma: 0.99 # Discount for cost (constraint violations)
+    cost_gae_lambda: 0.95
+
+    # Value and cost function coefficients
+    vf_coef: 1.0
+    cf_coef: 1.0 # Cost function coefficient
+
+    # Gradient settings
+    max_grad_norm: 0.5
+
+    # KL divergence constraint
+    target_kl: 0.01 # Tighter constraint for safety
+
+  # Network Architecture - Actor-Critic with Cost Critic
+  network:
+    type: "actor_double_critic" # Policy + Value Critic + Cost Critic
+
+    # Policy network
+    policy_net:
+      hidden_layers: [512, 512, 256]
+      activation: "tanh"
+      layer_norm: true
+      dropout: 0.1
+      log_std_init: -1.0 # Lower initial exploration for safety
+
+    # Value critic (reward prediction)
+    value_net:
+      hidden_layers: [512, 512, 256]
+      activation: "relu"
+      layer_norm: true
+      dropout: 0.0
+
+    # Cost critic (constraint violation prediction)
+    cost_net:
+      hidden_layers: [512, 512, 256]
+      activation: "relu"
+      layer_norm: true
+      dropout: 0.0
+      separate_heads: true # Separate head for each constraint type
+
+    initialization: "orthogonal"
+    init_scale: 0.5 # Conservative initialization
+
+  # Lagrangian multipliers for constraint enforcement
+  lagrangian:
+    enabled: true
+    initial_multipliers:
+      var_constraint: 1.0
+      drawdown_constraint: 2.0
+      concentration_constraint: 0.5
+      duration_constraint: 0.3
+
+    # Adaptive multiplier updates
+    multiplier_lr: 0.01
+    multiplier_max: 100.0 # Maximum multiplier value
+    multiplier_min: 0.0
+
+  # Safety layer (additional action filtering)
+  safety_layer:
+    enabled: true
+    method: "projection" # Project actions onto safe set
+    constraint_buffer: 0.05 # Stay 5% away from constraint boundary
+
+# ==============================================================================
+# CONSTRAINT SPECIFICATIONS
+# ==============================================================================
+constraints:
+  # Hard constraints that MUST be satisfied
+  hard_constraints:
+    # Value-at-Risk constraint
+    - name: "var_95"
+      type: "value_at_risk"
+      threshold: 0.03 # Max 3% daily VaR at 95% confidence
+      lookback: 252
+      violation_tolerance: 0.05 # Allow 5% of days to violate
+
+    # Conditional Value-at-Risk (Expected Shortfall)
+    - name: "cvar_95"
+      type: "conditional_var"
+      threshold: 0.05 # Max 5% CVaR (tail risk)
+      lookback: 252
+
+    # Maximum drawdown constraint
+    - name: "max_drawdown"
+      type: "drawdown"
+      threshold: 0.15 # Max 15% drawdown from peak
+      measurement: "peak_to_trough"
+
+    # Duration constraint (interest rate risk)
+    - name: "duration_neutral"
+      type: "duration"
+      target: 0.0 # Duration neutral
+      tolerance: 2.0 # Allow +/- 2 years
+
+    # Sector concentration constraint
+    - name: "sector_concentration"
+      type: "concentration"
+      metric: "herfindahl" # HHI index
+      max_hhi: 0.25 # Equivalent to 4+ equal sectors
+
+    # Rating concentration constraint
+    - name: "rating_concentration"
+      type: "concentration"
+      metric: "max_weight"
+      max_weight: 0.40 # Max 40% in any rating bucket
+
+    # Leverage constraint
+    - name: "gross_leverage"
+      type: "leverage"
+      max_gross_leverage: 1.0 # No leverage
+      max_net_leverage: 1.0
+
+  # Soft constraints (preferences, not hard limits)
+  soft_constraints:
+    # Turnover preference
+    - name: "low_turnover"
+      type: "turnover"
+      target: 3.0 # Annual turnover target
+      tolerance: 2.0
+      weight: 0.1
+
+    # Tracking error to benchmark
+    - name: "tracking_error"
+      type: "tracking_error"
+      benchmark: "AGG" # Bloomberg Aggregate Bond Index
+      max_te: 0.04 # 4% annual tracking error
+      weight: 0.05
+
+    # Liquidity preference
+    - name: "liquidity_score"
+      type: "liquidity"
+      min_avg_daily_volume: 10_000_000 # $10M daily volume
+      weight: 0.05
+
+# ==============================================================================
+# DATA CONFIGURATION OVERRIDES
+# ==============================================================================
+data:
+  # Diversified portfolio for risk management
+  focus_instruments:
+    investment_grade:
+      - "LQD"
+      - "VCIT"
+      - "VCSH"
+      - "IGLB"
+
+    high_yield:
+      - "HYG"
+      - "JNK"
+      - "SHYG"
+
+    treasury:
+      - "IEF"
+      - "TLT"
+      - "SHY"
+
+    diversifiers:
+      - "SPY" # Equity exposure
+      - "GLD" # Gold (flight to quality)
+
+# ==============================================================================
+# TRAINING CONFIGURATION
+# ==============================================================================
+training:
+  # Constraint violation monitoring
+  constraint_monitoring:
+    check_frequency: 1 # Check every step
+    log_violations: true
+    hard_stop_on_violation: false # Don't stop, but log and penalize
+
+  # Evaluation with constraint checking
+  evaluation:
+    frequency: 20_000
+    n_eval_episodes: 100 # More episodes for constraint estimation
+    deterministic: true
+    check_constraints: true # Verify constraints during eval
+
+  # Constraint curriculum (gradually tighten constraints)
+  constraint_curriculum:
+    enabled: true
+    stages:
+      - stage: 1
+        name: "loose_constraints"
+        steps: 500_000
+        constraint_scale: 1.5 # 50% looser
+
+      - stage: 2
+        name: "normal_constraints"
+        steps: 1_000_000
+        constraint_scale: 1.0
+
+      - stage: 3
+        name: "tight_constraints"
+        steps: 500_000
+        constraint_scale: 0.8 # 20% tighter (stress test)
+
+  # Safety warm-up period
+  safety_warmup:
+    enabled: true
+    steps: 50_000
+    initial_safety_multiplier: 2.0 # Extra conservative initially
+
+# ==============================================================================
+# BACKTESTING OVERRIDES
+# ==============================================================================
+backtesting:
+  # Risk-focused metrics
+  metrics:
+    - "sharpe_ratio"
+    - "sortino_ratio"
+    - "calmar_ratio"
+    - "max_drawdown"
+    - "avg_drawdown"
+    - "drawdown_duration"
+    - "var_95"
+    - "cvar_95"
+    - "var_99"
+    - "cvar_99"
+    - "constraint_violation_rate"
+    - "constraint_violation_magnitude"
+    - "annualized_return"
+    - "annualized_volatility"
+    - "information_ratio"
+    - "tracking_error"
+    - "upside_capture"
+    - "downside_capture"
+
+  # Constraint violation analysis
+  constraint_analysis:
+    enabled: true
+    track_violations_by_type: true
+    track_violation_severity: true
+    analyze_violation_clustering: true # Do violations cluster in time?
+
+  # Stress testing
+  stress_testing:
+    enabled: true
+    scenarios:
+      - name: "covid_march_2020"
+        date_range: ["2020-03-01", "2020-03-31"]
+        check_constraints: true
+
+      - name: "rate_shock_2022"
+        date_range: ["2022-01-01", "2022-12-31"]
+        check_constraints: true
+
+      - name: "volmageddon_2018"
+        date_range: ["2018-02-01", "2018-02-28"]
+        check_constraints: true
+
+      - name: "credit_crisis_2008"
+        date_range: ["2008-09-01", "2009-03-31"]
+        check_constraints: true
+
+# ==============================================================================
+# RISK MANAGEMENT OVERRIDES
+# ==============================================================================
+risk_management:
+  # Real-time constraint enforcement
+  realtime_enforcement:
+    enabled: true
+    check_before_trade: true
+    reject_violating_actions: true
+
+  # Risk decomposition
+  risk_decomposition:
+    enabled: true
+    factors:
+      - "interest_rate_risk"
+      - "credit_spread_risk"
+      - "equity_risk"
+      - "volatility_risk"
+      - "liquidity_risk"
+
+  # Dynamic risk budgeting
+  risk_budgeting:
+    method: "risk_parity"
+    rebalance_frequency: 21 # Daily rebalance to maintain risk budget
+
+  # Tail risk hedging
+  tail_risk_hedging:
+    enabled: true
+    hedge_threshold_var: 0.025 # Hedge when VaR > 2.5%
+    hedge_instruments: ["VIX", "TLT"] # Vol and rates hedges
+
+# ==============================================================================
+# LOGGING OVERRIDES
+# ==============================================================================
+logging:
+  # CPO-specific metrics
+  custom_metrics:
+    - "train/policy_loss"
+    - "train/value_loss"
+    - "train/cost_loss"
+    - "train/kl_divergence"
+    - "train/lagrange_multiplier_var"
+    - "train/lagrange_multiplier_drawdown"
+    - "train/lagrange_multiplier_concentration"
+    - "train/constraint_cost_return"
+    - "train/line_search_steps"
+    - "rollout/constraint_violation_count"
+    - "rollout/constraint_violation_magnitude"
+
+  # Constraint violation logging
+  constraint_logging:
+    log_all_violations: true
+    log_near_violations: true # Log when close to violation
+    near_violation_threshold: 0.9 # Within 90% of constraint
+
+  checkpointing:
+    save_frequency: 50_000
+    keep_best_n: 10
+    metric: "eval/sharpe_ratio_constrained" # Sharpe ratio with constraint penalty
+
+  # Alert system for severe violations
+  alerting:
+    enabled: true
+    alert_on_hard_constraint_violation: true
+    alert_threshold_severity: "high"
+
+# ==============================================================================
+# DEPLOYMENT SETTINGS (for production)
+# ==============================================================================
+deployment:
+  # Safety checks before deployment
+  pre_deployment_validation:
+    enabled: true
+    required_tests:
+      - "stress_test_pass"
+      - "constraint_satisfaction_rate > 0.99"
+      - "sharpe_ratio > 1.0"
+      - "max_drawdown < 0.15"
+
+  # Live monitoring
+  live_monitoring:
+    constraint_check_frequency_seconds: 60
+    alert_on_approaching_constraint: true
+    auto_reduce_exposure_on_violation: true
+    emergency_deleveraging_threshold: 0.95 # Reduce exposure at 95% of constraint

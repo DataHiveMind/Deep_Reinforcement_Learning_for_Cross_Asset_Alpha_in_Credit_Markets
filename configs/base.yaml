@@ -1,0 +1,340 @@
+# Base Configuration for Credit Market RL Project
+# This file contains shared settings used across all agents and environments
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+data:
+  # Data source settings
+  source:
+    provider: "yfinance" # Primary data provider
+    backup_provider: "pandas_datareader" # Fallback provider
+    cache_dir: "data/raw"
+    use_cache: true
+    cache_ttl_days: 1 # Time-to-live for cached data
+
+  # ArcticDB time-series database configuration
+  arctic:
+    enabled: true
+    library: "credit_market_data"
+    storage_backend: "lmdb" # Options: lmdb, s3, azure
+    storage_path: "data/arctic_db"
+    compression: "lz4" # High-speed compression for time-series
+
+  # Credit Instruments Portfolio
+  credit_instruments:
+    # Investment Grade Corporate Bond ETFs
+    investment_grade:
+      - "LQD" # iShares iBoxx $ Investment Grade Corporate Bond ETF
+      - "VCIT" # Vanguard Intermediate-Term Corporate Bond ETF
+      - "VCSH" # Vanguard Short-Term Corporate Bond ETF
+      - "VCLT" # Vanguard Long-Term Corporate Bond ETF
+      - "IGLB" # iShares 10+ Year Investment Grade Corporate Bond ETF
+
+    # High Yield Corporate Bond ETFs
+    high_yield:
+      - "HYG" # iShares iBoxx $ High Yield Corporate Bond ETF
+      - "JNK" # SPDR Bloomberg High Yield Bond ETF
+      - "SHYG" # iShares 0-5 Year High Yield Corporate Bond ETF
+      - "SJNK" # SPDR Bloomberg Short Term High Yield Bond ETF
+      - "USHY" # iShares Broad USD High Yield Corporate Bond ETF
+
+    # Credit Spread Indices (via ETFs)
+    spread_indices:
+      - "CDX.IG" # Credit Default Swap Index - Investment Grade (synthetic)
+      - "CDX.HY" # Credit Default Swap Index - High Yield (synthetic)
+
+  # Treasury Instruments (Risk-Free Benchmark)
+  treasury_instruments:
+    short_term:
+      - "SHY" # iShares 1-3 Year Treasury Bond ETF
+      - "VGSH" # Vanguard Short-Term Treasury ETF
+      - "IEI" # iShares 3-7 Year Treasury Bond ETF
+
+    intermediate_term:
+      - "IEF" # iShares 7-10 Year Treasury Bond ETF
+      - "VGIT" # Vanguard Intermediate-Term Treasury ETF
+
+    long_term:
+      - "TLT" # iShares 20+ Year Treasury Bond ETF
+      - "VGLT" # Vanguard Long-Term Treasury ETF
+      - "TLH" # iShares 10-20 Year Treasury Bond ETF
+
+  # Equity Volatility Instruments (Cross-Asset Indicators)
+  equity_volatility:
+    - "VXX" # iPath Series B S&P 500 VIX Short-Term Futures ETN
+    - "VIXY" # ProShares VIX Short-Term Futures ETF
+    - "SPY" # SPDR S&P 500 ETF Trust (for equity-credit correlation)
+    - "QQQ" # Invesco QQQ Trust (Nasdaq)
+
+  # Market Regime Indicators
+  regime_indicators:
+    - "^VIX" # CBOE Volatility Index
+    - "^MOVE" # ICE BofA MOVE Index (synthetic, use proxy)
+    - "^IRX" # 13-Week Treasury Bill
+    - "^TNX" # 10-Year Treasury Yield
+    - "DX-Y.NYB" # US Dollar Index
+
+  # Feature Engineering
+  features:
+    technical_indicators:
+      - "returns"
+      - "log_returns"
+      - "volatility"
+      - "rolling_sharpe"
+      - "rsi"
+      - "macd"
+      - "bollinger_bands"
+      - "spread_z_score"
+
+    credit_specific:
+      - "option_adjusted_spread" # OAS (estimated from ETF prices)
+      - "duration"
+      - "convexity"
+      - "carry"
+      - "pull_to_par"
+      - "cds_bond_basis"
+      - "credit_spread_change"
+      - "liquidity_score"
+
+    cross_asset:
+      - "equity_credit_correlation"
+      - "rates_credit_correlation"
+      - "vix_spread_correlation"
+      - "equity_vol_implied"
+
+    macro_regimes:
+      - "vix_percentile"
+      - "oas_percentile"
+      - "yield_curve_slope"
+      - "credit_cycle_phase"
+
+# ==============================================================================
+# TEMPORAL PARAMETERS
+# ==============================================================================
+time:
+  frequency: "D" # 'D' for daily, 'W' for weekly, 'M' for monthly
+
+  # Training period
+  train_start_date: "2010-01-01"
+  train_end_date: "2019-12-31"
+
+  # Validation period
+  val_start_date: "2020-01-01"
+  val_end_date: "2021-12-31"
+
+  # Test period (including COVID stress period)
+  test_start_date: "2022-01-01"
+  test_end_date: null # null implies up to most recent data
+
+  # Rolling window parameters
+  lookback_window: 252 # Trading days (~1 year)
+  rebalance_frequency: 21 # Trading days (~1 month)
+
+  # Regime detection windows
+  volatility_window: 63 # ~3 months for vol estimation
+  correlation_window: 126 # ~6 months for correlation estimation
+
+# ==============================================================================
+# ENVIRONMENT CONFIGURATION
+# ==============================================================================
+environment:
+  # Environment type
+  env_class: "cross_asset_env" # Options: credit_spread_env, cross_asset_env, liquidity_env
+
+  # Observation space
+  observation:
+    normalize: true
+    normalization_method: "standard" # Options: standard, minmax, robust
+    include_history: true
+    history_length: 20 # Number of past timesteps to include
+
+  # Action space
+  action:
+    type: "continuous" # Options: discrete, continuous, multi_discrete
+    discrete_actions: ["BUY", "SELL", "HOLD"] # Used if type=discrete
+    continuous_bounds: [-1.0, 1.0] # Position sizing bounds
+
+  # Reward function
+  reward:
+    type: "risk_adjusted_returns" # Options: returns, sharpe, sortino, risk_adjusted_returns
+    risk_free_rate: 0.02 # Annual risk-free rate
+    transaction_cost_bps: 10 # Basis points per trade
+    slippage_bps: 5 # Market impact in basis points
+    penalty_drawdown: true
+    max_drawdown_threshold: 0.15 # 15% max drawdown limit
+
+  # Trading constraints
+  constraints:
+    max_position_size: 1.0 # Maximum fraction of capital per position
+    max_leverage: 1.0 # No leverage by default
+    max_sector_exposure: 0.40 # Maximum 40% in any single sector
+    min_cash_reserve: 0.05 # Minimum 5% cash buffer
+    max_turnover_annual: 10.0 # Maximum 10x annual turnover
+
+# ==============================================================================
+# AGENT CONFIGURATION (Base Settings)
+# ==============================================================================
+agent:
+  # General agent settings
+  algorithm: "PPO" # Override in specific config files
+  device: "cpu" # Options: cpu, cuda, mps
+  seed: 42
+
+  # Training hyperparameters
+  training:
+    total_timesteps: 1_000_000
+    n_steps: 2048 # Steps per rollout
+    batch_size: 64
+    n_epochs: 10
+    learning_rate: 3.0e-4
+    lr_schedule: "linear" # Options: linear, constant, exponential
+
+    # Early stopping
+    early_stopping:
+      enabled: true
+      patience: 50 # Episodes without improvement
+      min_delta: 0.001 # Minimum change to qualify as improvement
+
+  # Network architecture
+  network:
+    policy_net:
+      hidden_layers: [256, 256, 128]
+      activation: "relu" # Options: relu, tanh, elu
+      dropout: 0.0
+
+    value_net:
+      hidden_layers: [256, 256, 128]
+      activation: "relu"
+      dropout: 0.0
+
+    shared_features: false # Whether to share feature extraction
+
+  # Exploration
+  exploration:
+    initial_epsilon: 1.0
+    final_epsilon: 0.01
+    decay_steps: 100_000
+    noise_type: "gaussian" # Options: gaussian, ornstein_uhlenbeck, none
+    noise_std: 0.1
+
+# ==============================================================================
+# BACKTESTING CONFIGURATION
+# ==============================================================================
+backtesting:
+  # Performance metrics
+  metrics:
+    - "sharpe_ratio"
+    - "sortino_ratio"
+    - "calmar_ratio"
+    - "max_drawdown"
+    - "annualized_return"
+    - "win_rate"
+    - "profit_factor"
+    - "var_95"
+    - "cvar_95"
+    - "turnover"
+
+  # Transaction cost model
+  transaction_costs:
+    model: "realistic" # Options: none, simple, realistic
+    bid_ask_spread_bps:
+      investment_grade: 5
+      high_yield: 15
+      treasury: 2
+      etf: 3
+
+    price_impact:
+      model: "square_root" # Options: linear, square_root, power_law
+      impact_coefficient: 0.1
+      temporary_impact_decay: 0.5
+
+    dealer_markup_bps:
+      institutional: 10
+      retail: 25
+
+    latency_seconds:
+      otc_bonds: 300 # 5 minutes typical for OTC
+      exchange_etf: 1
+
+  # Walk-forward validation
+  walk_forward:
+    enabled: true
+    train_window_months: 36 # 3 years
+    test_window_months: 6
+    step_size_months: 3 # Retrain every quarter
+
+  # Regime analysis
+  regime_analysis:
+    enabled: true
+    regimes:
+      - "low_vol" # VIX < 15
+      - "medium_vol" # VIX 15-25
+      - "high_vol" # VIX > 25
+      - "crisis" # VIX > 40 or extreme spread widening
+
+# ==============================================================================
+# LOGGING & MONITORING
+# ==============================================================================
+logging:
+  # Logging levels
+  console_level: "INFO" # Options: DEBUG, INFO, WARNING, ERROR
+  file_level: "DEBUG"
+  log_dir: "logs"
+
+  # TensorBoard
+  tensorboard:
+    enabled: true
+    log_dir: "runs"
+    log_interval: 100 # Log every N steps
+
+  # Model checkpointing
+  checkpointing:
+    enabled: true
+    save_dir: "models/checkpoints"
+    save_frequency: 10_000 # Save every N steps
+    keep_best_n: 5 # Keep top 5 models by validation performance
+
+  # Experiment tracking
+  experiment_tracking:
+    enabled: false # Enable for MLflow/Weights & Biases integration
+    platform: "mlflow" # Options: mlflow, wandb, tensorboard
+    project_name: "credit-alpha-rl"
+
+# ==============================================================================
+# RISK MANAGEMENT
+# ==============================================================================
+risk_management:
+  # Position limits
+  position_limits:
+    max_portfolio_vol_annual: 0.15 # 15% annual volatility target
+    max_correlation_exposure: 0.70 # Maximum 70% correlation to single factor
+
+  # Stop-loss rules
+  stop_loss:
+    enabled: true
+    portfolio_level_pct: 0.10 # Stop if portfolio down 10%
+    position_level_pct: 0.20 # Stop individual position if down 20%
+
+  # Volatility targeting
+  vol_targeting:
+    enabled: true
+    target_vol_annual: 0.10 # 10% annual volatility
+    rebalance_threshold: 0.02 # Rebalance if vol differs by 2%
+
+  # Stress testing
+  stress_testing:
+    enabled: true
+    scenarios:
+      - "covid_march_2020"
+      - "rate_shock_2022"
+      - "credit_crisis_2008"
+      - "taper_tantrum_2013"
+
+# ==============================================================================
+# REPRODUCIBILITY
+# ==============================================================================
+reproducibility:
+  seed: 42
+  deterministic: true # Force deterministic operations (slower but reproducible)
+  use_cuda_deterministic: true
