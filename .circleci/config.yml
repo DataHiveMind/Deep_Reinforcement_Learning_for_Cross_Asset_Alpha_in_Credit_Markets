@@ -1,0 +1,256 @@
+version: 2.1
+
+executors:
+  conda-executor:
+    docker:
+      - image: continuumio/miniconda3:latest
+    working_directory: ~/project
+
+jobs:
+  setup-conda:
+    executor: conda-executor
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+            - conda-env-v1-
+
+      - run:
+          name: Update Conda
+          command: |
+            conda update -n base -c defaults conda -y
+
+      - run:
+          name: Create Conda Environment
+          command: |
+            if [ ! -d "/opt/conda/envs/credit-alpha-rl" ]; then
+              conda env create -f environment.yaml
+            else
+              conda env update -f environment.yaml --prune
+            fi
+
+      - run:
+          name: Verify Environment
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+            conda list
+            python --version
+
+      - save_cache:
+          key: conda-env-v1-{{ checksum "environment.yaml" }}
+          paths:
+            - /opt/conda/envs/credit-alpha-rl
+
+      - persist_to_workspace:
+          root: ~/project
+          paths:
+            - .
+
+  run-tests:
+    executor: conda-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+
+      - run:
+          name: Run Pytest with Coverage
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+            pytest tests/ \
+              --maxfail=1 \
+              --disable-warnings \
+              --cov=agents \
+              --cov=envs \
+              --cov=backtests \
+              --cov=data \
+              --cov=utils \
+              --cov-report=html \
+              --cov-report=xml \
+              --cov-report=term \
+              --junitxml=test-results/junit.xml \
+              -v
+
+      - store_test_results:
+          path: test-results
+
+      - store_artifacts:
+          path: htmlcov
+          destination: coverage-report
+
+      - store_artifacts:
+          path: coverage.xml
+          destination: coverage.xml
+
+  lint:
+    executor: conda-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+
+      - run:
+          name: Run Flake8 Linting
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+            flake8 agents envs backtests dashboards utils data \
+              --count \
+              --statistics \
+              --show-source \
+              --max-line-length=120 \
+              --exclude=__pycache__,.pytest_cache,.git,data/raw,data/processed \
+              --output-file=flake8-report.txt || true
+
+            # Display results
+            cat flake8-report.txt
+
+      - store_artifacts:
+          path: flake8-report.txt
+          destination: flake8-report.txt
+
+  type-check:
+    executor: conda-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+
+      - run:
+          name: Run MyPy Type Checking
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+
+            # Install mypy if not present
+            pip install mypy types-PyYAML --quiet
+
+            mypy agents envs backtests data utils \
+              --ignore-missing-imports \
+              --no-strict-optional \
+              --warn-redundant-casts \
+              --warn-unused-ignores \
+              --show-error-codes \
+              --pretty \
+              --html-report mypy-report || true
+
+      - store_artifacts:
+          path: mypy-report
+          destination: mypy-report
+
+  test-agents:
+    executor: conda-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+
+      - run:
+          name: Test Agent Modules
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+            pytest tests/test_agents.py -v --maxfail=1 --disable-warnings
+
+  test-envs:
+    executor: conda-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+
+      - run:
+          name: Test Environment Modules
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+            pytest tests/test_envs.py -v --maxfail=1 --disable-warnings
+
+  test-backtests:
+    executor: conda-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+
+      - run:
+          name: Test Backtest Modules
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+            pytest tests/test_backtest.py -v --maxfail=1 --disable-warnings
+
+  test-data:
+    executor: conda-executor
+    steps:
+      - attach_workspace:
+          at: ~/project
+
+      - restore_cache:
+          keys:
+            - conda-env-v1-{{ checksum "environment.yaml" }}
+
+      - run:
+          name: Test Data Pipeline
+          command: |
+            eval "$(conda shell.bash hook)"
+            conda activate credit-alpha-rl
+            pytest tests/test_data_loader.py -v --maxfail=1 --disable-warnings
+
+workflows:
+  ci-pipeline:
+    jobs:
+      - setup-conda
+
+      - lint:
+          requires:
+            - setup-conda
+
+      - type-check:
+          requires:
+            - setup-conda
+
+      - test-agents:
+          requires:
+            - setup-conda
+
+      - test-envs:
+          requires:
+            - setup-conda
+
+      - test-backtests:
+          requires:
+            - setup-conda
+
+      - test-data:
+          requires:
+            - setup-conda
+
+      - run-tests:
+          requires:
+            - test-agents
+            - test-envs
+            - test-backtests
+            - test-data
